@@ -253,8 +253,8 @@ def create_app(auth_code: str | None = None) -> Flask:
         from core.email_provider import parse_email_sources
         pool = {"total": 0, "available": 0, "used": 0, "failed": 0}
         for src in parse_email_sources(_email_cfg.EMAIL_SOURCE):
-            # GPTMail/MailNest/CloudMail 地址按需生成，不属于本地邮箱池。
-            if src in ("gptmail", "mailnest", "cloudmail", "cloudflare"):
+            # iCloud 网关和临时邮箱由远端按需分配，不属于本地邮箱池。
+            if src in ("icloud", "gptmail", "mailnest", "cloudmail", "cloudflare"):
                 continue
             one = (
                 db.generic_api_email_pool_summary() if src == "generic_api"
@@ -2158,6 +2158,19 @@ def create_app(auth_code: str | None = None) -> Flask:
                 "workers": workers,
             })
         sources = parse_email_sources(_email_cfg.EMAIL_SOURCE)
+        if "icloud" in sources:
+            api_base = str(getattr(_email_cfg, "ICLOUD_API_BASE", "") or "").strip()
+            api_key = str(getattr(_email_cfg, "ICLOUD_API_KEY", "") or "").strip()
+            if not api_base:
+                return jsonify({
+                    "ok": False,
+                    "error": "已选择 icloud 邮箱来源，请填写 iCloud 网关地址（配置 → 邮箱 / OTP）。",
+                }), 400
+            if not api_key:
+                return jsonify({
+                    "ok": False,
+                    "error": "已选择 icloud 邮箱来源，请填写 iCloud 网关 API Key（配置 → 邮箱 / OTP）。",
+                }), 400
         if "gptmail" in sources:
             api_key = str(getattr(_email_cfg, "GPTMAIL_API_KEY", "") or "").strip()
             if not api_key:
@@ -2207,7 +2220,7 @@ def create_app(auth_code: str | None = None) -> Flask:
                     "ok": False,
                     "error": "已选择 cloudmail 邮箱来源，请填写 CloudMail Token（配置 → 邮箱 / OTP）。",
                 }), 400
-        if "gptmail" in sources or "mailnest" in sources or "cloudmail" in sources or "cloudflare" in sources:
+        if "icloud" in sources or "gptmail" in sources or "mailnest" in sources or "cloudmail" in sources or "cloudflare" in sources:
             # 临时邮箱在任务开始时动态生成，不需要本地邮箱池容量提示。
             warning = ""
         elif "cloudflare_domain" in sources:

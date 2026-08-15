@@ -8,6 +8,10 @@
 用于注册的API邮箱.json
 用于注册的API邮箱.txt
 
+# iCloud 网关服务端账号池（含 Apple App 专用密码）
+icloud_gateway/accounts.json
+icloud_gateway/docker-compose.yml
+
 # 注册成功账号（含 accessToken、TOTP secret 等）
 注册成功的邮箱.json
 注册成功的邮箱.txt

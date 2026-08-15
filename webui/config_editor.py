@@ -317,7 +317,21 @@ EDITABLE_FIELDS = [
     },
     {
         "key": "EMAIL_SOURCE", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
-        "label": "邮箱来源", "help": "可填单个或多个，逗号分隔并按顺序兜底：outlook,generic_api,cloudflare_domain,cloudflare,gptmail,mailnest,cloudmail",
+        "label": "邮箱来源", "help": "可填单个或多个，逗号分隔并按顺序兜底：icloud,outlook,generic_api,cloudflare_domain,cloudflare,gptmail,mailnest,cloudmail",
+    },
+    {
+        "key": "ICLOUD_API_BASE", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
+        "label": "iCloud 网关地址", "help": "自建 iCloud Mail 网关 HTTPS 地址；选择 icloud 时必填",
+        "storage": "env",
+    },
+    {
+        "key": "ICLOUD_API_KEY", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
+        "label": "iCloud 网关 API Key", "help": "与服务器 ICLOUD_GATEWAY_API_KEY 一致；保存在 .env",
+        "storage": "env", "secret": True,
+    },
+    {
+        "key": "ICLOUD_REQUEST_TIMEOUT", "file": "email.py", "type": "int", "group": "邮箱 / OTP",
+        "label": "iCloud 网关超时(秒)", "help": "单次网关请求超时；OTP 总等待由 OTP_MAX_WAIT 控制",
     },
     {
         "key": "GPTMAIL_API_KEY", "file": "email.py", "type": "str", "group": "邮箱 / OTP",

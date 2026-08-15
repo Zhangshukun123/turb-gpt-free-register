@@ -45,6 +45,7 @@ ChatGPT / OpenAI 账号自动注册与 Codex OAuth 授权工具。当前项目�
 支持多种邮箱来源：
 
 - Outlook 邮箱池：`email----password----clientId----refreshToken`
+- iCloud Mail：部署内置 IMAP 网关，项目通过鉴权 API 领取邮箱并收取 OTP（`icloud`）
 - Cloudflare 域名邮箱 + QQ 邮箱 IMAP 收信（`cloudflare_domain`）
 - Cloudflare Worker 临时邮箱：自动创建 + JWT 取码（`cloudflare`，兼容 cloudflare_temp_email）
 - 通用 API 邮箱：`email----取码地址`
@@ -120,6 +121,7 @@ cp .env.example .env
 - `SKYVERN_API_KEY`
 - `ROXY_API_TOKEN`
 - `QQ_IMAP_PASSWORD`
+- `ICLOUD_API_KEY`（`EMAIL_SOURCE=icloud` 时）
 - `CLOUDFLARE_API_KEY` / `CLOUDFLARE_CUSTOM_AUTH`（`EMAIL_SOURCE=cloudflare` 时）
 - `CPA_MANAGEMENT_KEY`
 - `SMS_API_KEY`
@@ -151,6 +153,45 @@ python web.py --auth-code 你的授权码
 `WEBUI_SESSION_SECRET` 可选；未设置时会从固定授权码派生稳定的 Session 签名密钥，修改授权码后已有登录会自动失效。
 
 ### 1. 配置邮箱源
+
+#### iCloud Mail 网关（`icloud`）
+
+项目内置了可独立部署的 `icloud_gateway`。网关在服务器通过 Apple iCloud IMAP 收信，Apple App 专用密码只留在服务器；主项目只保存网关地址和 API Key。
+
+服务器端：
+
+```bash
+cp icloud_gateway/accounts.json.example icloud_gateway/accounts.json
+export ICLOUD_GATEWAY_API_KEY='替换为长随机密钥'
+export ICLOUD_ACCOUNTS_FILE="$PWD/icloud_gateway/accounts.json"
+python -m icloud_gateway.app
+```
+
+也可以调用接口导入邮箱。两段格式用于普通 iCloud 邮箱，三段格式可把注册邮箱/别名映射到实际 IMAP 登录名：
+
+```text
+email@icloud.com----xxxx-xxxx-xxxx-xxxx
+alias@icloud.com----icloud-login-name----xxxx-xxxx-xxxx-xxxx
+```
+
+```bash
+curl -X POST https://你的网关/api/v1/accounts/import \
+  -H "X-API-Key: $ICLOUD_GATEWAY_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"email@icloud.com----xxxx-xxxx-xxxx-xxxx"}'
+```
+
+主项目 `.env`：
+
+```dotenv
+USE_EMAIL_SERVICE=True
+EMAIL_SOURCE=icloud
+ICLOUD_API_BASE=https://你的网关
+ICLOUD_API_KEY=与服务器相同的密钥
+ICLOUD_REQUEST_TIMEOUT=25
+```
+
+网关使用 `imap.mail.me.com:993` + SSL。账号需开启双重认证并使用 Apple App 专用密码，而不是 Apple 账户主密码。完整部署和接口说明见 `icloud_gateway/README.md`。
 
 #### Outlook 邮箱池
 
@@ -580,7 +621,7 @@ REGISTER_PASSWORD = "你的固定密码"
 | `config/roxybrowser.py` | 注册驱动、Roxy API、Roxy 环境生命周期 |
 | `config/cloakbrowser.py` | CloakBrowser 无头/humanize/geoip/语言时区/指纹 seed |
 | `config/codex.py` | Codex OAuth、授权驱动、CPA 管理接口、接码平台 |
-| `config/email.py` | 邮箱来源、OTP 轮询、QQ IMAP、域名邮箱、Cloudflare Worker 临时邮箱 |
+| `config/email.py` | 邮箱来源、OTP 轮询、iCloud 网关、QQ IMAP、域名邮箱、Cloudflare Worker 临时邮箱 |
 | `config/proxy.py` | 代理池 |
 | `config/register.py` | 默认邮箱、密码、显示名 |
 | `config/twofa.py` | 2FA 开关 |
@@ -752,10 +793,12 @@ ENABLE_CODEX_AUTO = False
 │   ├── registration_service.py     # WebUI 注册线程池
 │   ├── codex_oauth.py              # Codex 协议/Roxy/Cloak 调度
 │   ├── email_provider.py           # 邮箱来源调度
+│   ├── icloud_api_client.py        # iCloud Mail 网关客户端
 │   ├── cf_temp_mail_client.py      # Cloudflare Worker 临时邮箱
 │   ├── sms_provider.py             # 接码平台
 │   ├── account_export.py           # 保存账号/批次归档
 │   └── db.py                       # 文件数据库
+├── icloud_gateway/                 # 可独立部署的 iCloud IMAP 取码网关
 ├── webui/
 │   ├── app.py                      # Flask API
 │   ├── config_editor.py            # 配置读写/热加载

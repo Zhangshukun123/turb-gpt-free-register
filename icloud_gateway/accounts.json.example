@@ -1,0 +1,11 @@
+{
+  "accounts": [
+    {
+      "email": "registration-address@icloud.com",
+      "username": "icloud-login-name",
+      "app_password": "xxxx-xxxx-xxxx-xxxx",
+      "status": "available",
+      "lease_id": ""
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+services:
+  icloud-mail-gateway:
+    build:
+      context: ..
+      dockerfile: icloud_gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      ICLOUD_GATEWAY_API_KEY: replace-with-a-long-random-key
+      ICLOUD_ACCOUNTS_FILE: /data/accounts.json
+      ICLOUD_IMAP_SERVER: imap.mail.me.com
+      ICLOUD_IMAP_PORT: "993"
+    volumes:
+      - ./accounts.json:/data/accounts.json
+    ports:
+      - "127.0.0.1:8789:8789"
