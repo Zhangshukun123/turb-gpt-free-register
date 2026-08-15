@@ -2307,6 +2307,7 @@
           <div class="outlook-v2-select-menu" role="listbox">
             <button type="button" class="outlook-v2-select-item is-active" data-value="all" role="option">全部邮箱池</button>
             <button type="button" class="outlook-v2-select-item" data-value="outlook" role="option">Outlook 邮箱池</button>
+            <button type="button" class="outlook-v2-select-item" data-value="icloud" role="option">iCloud 服务器邮箱池</button>
             <button type="button" class="outlook-v2-select-item" data-value="generic_api" role="option">通用 API 邮箱池</button>
             <button type="button" class="outlook-v2-select-item" data-value="cloudflare_domain" role="option">域名邮箱池</button>
           </div>
@@ -4590,6 +4591,7 @@ function getPoolSource() {
 const POOL_SOURCE_LABELS = {
   all: '全部邮箱池',
   outlook: 'Outlook 邮箱池',
+  icloud: 'iCloud 服务器邮箱池',
   generic_api: '通用 API 邮箱池',
   cloudflare_domain: '域名邮箱池',
 };
@@ -4613,7 +4615,7 @@ function getOutlookQuery() {
 }
 function poolKey(r) { return `${r.source || getPoolSource() || 'outlook'}|${r.email || ''}`; }
 function poolLabel(src) {
-  return ({outlook:'Outlook', generic_api:'通用API', cloudflare_domain:'域名邮箱'})[src] || src || '-';
+  return ({outlook:'Outlook', icloud:'iCloud服务器', generic_api:'通用API', cloudflare_domain:'域名邮箱'})[src] || src || '-';
 }
 async function loadOutlook() {
   try {
@@ -4648,6 +4650,9 @@ function positionOutlookV2MoreMenu(wrap) {
   menu.style.top = `${top}px`;
 }
 function _outlookTokenCell(r) {
+  if (r.source === 'icloud') {
+    return `<span class="acc-v2-token-none" title="验证码由已配置服务器接口获取">服务器取码</span>`;
+  }
   if (r.access_token) {
     const id = copyId(r.access_token);
     return `<button type="button" class="acc-v2-token-copy" data-copy-id="${id}" title="复制 Token">复制</button>`;
@@ -4655,6 +4660,7 @@ function _outlookTokenCell(r) {
   return `<span class="acc-v2-token-none">无Token</span>`;
 }
 function _outlookMoreMenu(r) {
+  if (r.readonly) return '';
   const src = esc(r.source || 'outlook');
   const email = esc(r.email);
   const items = [
@@ -4676,7 +4682,7 @@ function renderOutlook() {
       const email = esc(r.email);
       return `
     <tr>
-      <td class="col-check"><input type="checkbox" class="outlook-row-check" data-email="${email}" data-source="${src}" ${OUTLOOK_SELECTED.has(poolKey(r)) ? 'checked' : ''}></td>
+      <td class="col-check"><input type="checkbox" class="outlook-row-check" data-email="${email}" data-source="${src}" ${r.readonly ? 'disabled title="服务器邮箱池只读"' : (OUTLOOK_SELECTED.has(poolKey(r)) ? 'checked' : '')}></td>
       <td class="col-email" title="${email}">
         <div class="acc-v2-email">${email || '-'}</div>
         <div class="acc-v2-sub" title="${esc(r.copy_line || '')}">${esc(short(r.copy_line, 70))}</div>
@@ -4689,11 +4695,11 @@ function renderOutlook() {
       <td class="col-actions">
         <div class="acc-v2-actions">
           ${cbtn('复制邮箱', r.copy_line, 'primary')}
-          <button type="button" class="danger" data-pool-act="delete" data-email="${email}" data-source="${src}" title="删除邮箱素材">删除</button>
+          ${r.readonly ? '<span class="acc-v2-token-none">自动同步</span>' : `<button type="button" class="danger" data-pool-act="delete" data-email="${email}" data-source="${src}" title="删除邮箱素材">删除</button>
           <div class="acc-v2-more">
             <button type="button" class="acc-v2-more-btn" data-outlook-more-toggle aria-haspopup="true">更多</button>
             <div class="acc-v2-more-menu" role="menu">${_outlookMoreMenu(r)}</div>
-          </div>
+          </div>`}
         </div>
       </td>
     </tr>`;
@@ -4714,7 +4720,7 @@ function updateOutlookSelectionUi(pageRows = null) {
   });
 
   if (!pageRows) pageRows = OUTLOOK;
-  const pageKeys = pageRows.map(r => poolKey(r)).filter(Boolean);
+  const pageKeys = pageRows.filter(r => !r.readonly).map(r => poolKey(r)).filter(Boolean);
   const checkedCount = pageKeys.filter(key => OUTLOOK_SELECTED.has(key)).length;
   const allChecked = pageKeys.length > 0 && checkedCount === pageKeys.length;
   const someChecked = checkedCount > 0 && checkedCount < pageKeys.length;
@@ -4734,7 +4740,7 @@ function onPoolSourceChange(el) {
 }
 function syncOutlookSelectAll(checked) {
   const pageRows = OUTLOOK;
-  if (checked) pageRows.forEach(r => r.email && OUTLOOK_SELECTED.add(poolKey(r)));
+  if (checked) pageRows.forEach(r => r.email && !r.readonly && OUTLOOK_SELECTED.add(poolKey(r)));
   else pageRows.forEach(r => OUTLOOK_SELECTED.delete(poolKey(r)));
   renderOutlook();
 }

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import unittest
+from urllib.parse import parse_qs, urlsplit
 from unittest.mock import Mock, patch
 
 from core import icloud_api_client
@@ -108,6 +109,66 @@ class ICloudAPIClientTests(unittest.TestCase):
         self.assertEqual(code, "135790")
         self.assertEqual(request.call_count, 1)
         self.assertIn("workbench/openai-code", request.call_args.args[1])
+
+    @patch("core.icloud_api_client.requests.request")
+    def test_inventory_pool_pull_maps_server_rows_to_mailbox_format(self, request):
+        response = Mock(status_code=200, text="")
+        response.json.return_value = {
+            "ok": True,
+            "items": [{
+                "email": "box@icloud.com",
+                "status": "available",
+                "state": "unused",
+                "createdAt": "2026-08-15T00:00:00+00:00",
+            }],
+            "total": 99,
+            "page": 1,
+            "pageSize": 20,
+            "counts": {"available": 21, "used": 70, "failed": 0, "disabled": 8},
+        }
+        request.return_value = response
+        with patch.object(icloud_api_client._email_cfg, "ICLOUD_API_MODE", "inventory", create=True), patch.object(
+            icloud_api_client._email_cfg, "ICLOUD_API_BASE", "https://icloud.example", create=True
+        ), patch.object(icloud_api_client._email_cfg, "ICLOUD_API_KEY", "secret", create=True):
+            result = icloud_api_client.list_inventory_emails(
+                status="available", q="box", page=1, page_size=20
+            )
+
+        row = result["items"][0]
+        self.assertEqual(row["source"], "icloud")
+        self.assertTrue(row["readonly"])
+        self.assertEqual(row["otp_source"], "服务器取码")
+        self.assertEqual(row["copy_line"], "box@icloud.com")
+        query = parse_qs(urlsplit(request.call_args.args[1]).query)
+        self.assertEqual(query["status"], ["available"])
+        self.assertEqual(query["q"], ["box"])
+        self.assertEqual(request.call_args.kwargs["headers"]["X-HME-Import-Token"], "secret")
+
+    @patch("core.icloud_api_client.requests.Session")
+    @patch("core.icloud_api_client.requests.request")
+    def test_read_only_inventory_request_bypasses_flaky_proxy_after_tls_eof(self, request, session_cls):
+        request.side_effect = icloud_api_client.requests.exceptions.SSLError("unexpected eof")
+        response = Mock(status_code=200, text="")
+        response.json.return_value = {
+            "ok": True,
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "pageSize": 20,
+            "counts": {},
+        }
+        session = session_cls.return_value.__enter__.return_value
+        session.request.return_value = response
+        with patch.object(icloud_api_client._email_cfg, "ICLOUD_API_MODE", "inventory", create=True), patch.object(
+            icloud_api_client._email_cfg, "ICLOUD_API_BASE", "https://icloud.example", create=True
+        ), patch.object(icloud_api_client._email_cfg, "ICLOUD_API_KEY", "secret", create=True), patch.object(
+            icloud_api_client.time, "sleep"
+        ):
+            result = icloud_api_client.list_inventory_emails(page_size=20)
+
+        self.assertEqual(result["items"], [])
+        self.assertFalse(session.trust_env)
+        session.request.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ def _pool_source_arg(default: str = "outlook") -> str:
     if not src and request.method == "POST":
         data = request.get_json(silent=True) or {}
         src = (data.get("source") or data.get("type") or "").strip()
-    return src if src in ("all", "outlook", "generic_api", "cloudflare_domain") else default
+    return src if src in ("all", "outlook", "generic_api", "cloudflare_domain", "icloud") else default
 
 
 def _with_pool_source(rows: list[dict], source: str) -> list[dict]:
@@ -253,14 +253,22 @@ def create_app(auth_code: str | None = None) -> Flask:
         from core.email_provider import parse_email_sources
         pool = {"total": 0, "available": 0, "used": 0, "failed": 0}
         for src in parse_email_sources(_email_cfg.EMAIL_SOURCE):
-            # iCloud 网关和临时邮箱由远端按需分配，不属于本地邮箱池。
-            if src in ("icloud", "gptmail", "mailnest", "cloudmail", "cloudflare"):
+            if src == "icloud":
+                try:
+                    from core.icloud_api_client import inventory_pool_summary
+                    one = inventory_pool_summary()
+                except Exception as exc:
+                    logger.warning("拉取 iCloud 服务器邮箱池统计失败: %s", exc)
+                    one = {"total": 0, "available": 0, "used": 0, "failed": 0}
+            # 其他临时邮箱由远端按需分配，不属于可浏览的本地邮箱池。
+            elif src in ("gptmail", "mailnest", "cloudmail", "cloudflare"):
                 continue
-            one = (
-                db.generic_api_email_pool_summary() if src == "generic_api"
-                else db.domain_email_pool_summary() if src == "cloudflare_domain"
-                else db.outlook_pool_summary()
-            )
+            else:
+                one = (
+                    db.generic_api_email_pool_summary() if src == "generic_api"
+                    else db.domain_email_pool_summary() if src == "cloudflare_domain"
+                    else db.outlook_pool_summary()
+                )
             for k in pool:
                 pool[k] += int(one.get(k, 0) or 0)
         domain_pool = db.domain_email_pool_summary()
@@ -1282,6 +1290,9 @@ def create_app(auth_code: str | None = None) -> Flask:
     # ----------------------------------------------------------
     @app.get("/api/outlook")
     def api_outlook():
+        from config import email as _email_cfg
+        from core.email_provider import parse_email_sources
+
         status = request.args.get("status") or None
         limit = request.args.get("limit", default=500, type=int)
         source = _pool_source_arg()
@@ -1290,12 +1301,31 @@ def create_app(auth_code: str | None = None) -> Flask:
         page_arg = request.args.get("page", default=None, type=int)
         page_size_arg = request.args.get("page_size", default=None, type=int)
         fetch_limit = 1_000_000 if (paged or q) else limit
+        configured_sources = parse_email_sources(_email_cfg.EMAIL_SOURCE)
+
+        def _icloud_rows() -> list[dict]:
+            from core.icloud_api_client import list_inventory_emails
+
+            result = list_inventory_emails(status=status, q=q, page=1, page_size=5000)
+            return list(result.get("items") or [])
+
         if source == "all":
             rows = []
             rows += _with_pool_source(db.list_outlook_pool(status=status, limit=fetch_limit), "outlook")
             rows += _with_pool_source(db.list_generic_api_email_pool(status=status, limit=fetch_limit), "generic_api")
             rows += _with_pool_source(db.list_domain_email_pool(status=status, limit=fetch_limit), "cloudflare_domain")
+            if "icloud" in configured_sources:
+                try:
+                    rows += _icloud_rows()
+                except Exception as exc:
+                    logger.warning("拉取 iCloud 服务器邮箱池失败: %s", exc)
             rows = sorted(rows, key=lambda x: str(x.get("created_at") or x.get("imported_at") or x.get("used_at") or ""), reverse=True)
+        elif source == "icloud":
+            try:
+                rows = _icloud_rows()
+            except Exception as exc:
+                logger.exception("拉取 iCloud 服务器邮箱池失败")
+                return jsonify({"ok": False, "error": f"拉取 iCloud 服务器邮箱池失败: {exc}"}), 502
         elif source == "generic_api":
             rows = _with_pool_source(db.list_generic_api_email_pool(status=status, limit=fetch_limit), "generic_api")
         elif source == "cloudflare_domain":
@@ -1379,6 +1409,8 @@ def create_app(auth_code: str | None = None) -> Flask:
         source = (data.get("source") or _pool_source_arg()).strip()
         if source == "all":
             source = "outlook"
+        if source == "icloud":
+            return jsonify({"ok": False, "error": "iCloud 服务器邮箱池为只读；状态由服务器租约自动更新"}), 400
         if source == "generic_api":
             db.release_generic_api_email(email, status=status, note=data.get("note"))
         elif source == "cloudflare_domain":
@@ -1421,6 +1453,9 @@ def create_app(auth_code: str | None = None) -> Flask:
             if key in seen:
                 continue
             seen.add(key)
+            if item_source == "icloud":
+                skipped.append({"email": email, "source": item_source, "reason": "iCloud 服务器邮箱池为只读"})
+                continue
             try:
                 if item_source == "generic_api":
                     db.release_generic_api_email(email, status=status, note=note)
@@ -1448,6 +1483,8 @@ def create_app(auth_code: str | None = None) -> Flask:
         source = (data.get("source") or _pool_source_arg()).strip()
         if source == "all":
             source = "outlook"
+        if source == "icloud":
+            return jsonify({"ok": False, "error": "iCloud 服务器邮箱池为只读，不能从本地删除"}), 400
         deleted = (
             db.delete_generic_api_email(email)
             if source == "generic_api"
@@ -1487,6 +1524,9 @@ def create_app(auth_code: str | None = None) -> Flask:
             if key in seen:
                 continue
             seen.add(key)
+            if item_source == "icloud":
+                skipped.append({"email": email, "source": item_source, "reason": "iCloud 服务器邮箱池为只读"})
+                continue
             deleted_ok = (
                 db.delete_generic_api_email(email)
                 if item_source == "generic_api"

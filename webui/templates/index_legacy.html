@@ -609,6 +609,7 @@
             <select id="poolSource" style="flex:0 0 180px;margin-top:0;">
               <option value="all">全部邮箱池</option>
               <option value="outlook">Outlook 邮箱池</option>
+              <option value="icloud">iCloud 服务器邮箱池</option>
               <option value="generic_api">通用 API 邮箱池</option>
               <option value="cloudflare_domain">域名邮箱池</option>
             </select>
@@ -2381,7 +2382,7 @@ $('#copyAllLines').addEventListener('click', async () => {
 // ---------- 邮箱池 ----------
 function poolKey(r) { return `${r.source || $('#poolSource')?.value || 'outlook'}|${r.email || ''}`; }
 function poolLabel(src) {
-  return ({outlook:'Outlook', generic_api:'通用API', cloudflare_domain:'域名邮箱'})[src] || src || '-';
+  return ({outlook:'Outlook', icloud:'iCloud服务器', generic_api:'通用API', cloudflare_domain:'域名邮箱'})[src] || src || '-';
 }
 async function loadOutlook() {
   try {
@@ -2401,15 +2402,15 @@ function renderOutlook() {
   const rows = OUTLOOK;
   $('#outlookBody').innerHTML = rows.map(r => `
     <tr>
-      <td><input type="checkbox" class="outlook-row-check" data-email="${esc(r.email)}" data-source="${esc(r.source || 'outlook')}" ${OUTLOOK_SELECTED.has(poolKey(r)) ? 'checked' : ''}></td>
+      <td><input type="checkbox" class="outlook-row-check" data-email="${esc(r.email)}" data-source="${esc(r.source || 'outlook')}" ${r.readonly ? 'disabled title="服务器邮箱池只读"' : (OUTLOOK_SELECTED.has(poolKey(r)) ? 'checked' : '')}></td>
       <td><div class="main-cell">${esc(r.email)}</div><div class="sub-cell mono">${esc(short(r.copy_line, 70))}</div></td>
       <td>${esc(poolLabel(r.source))}</td>
       <td>${pill(r.status)}</td>
-      <td><span class="mono">${esc(short(r.access_token || '', 36) || '未生成')}</span></td>
+      <td><span class="mono">${r.source === 'icloud' ? '服务器取码' : esc(short(r.access_token || '', 36) || '未生成')}</span></td>
       <td class="muted">${esc(r.imported_at || r.created_at || '-')}</td>
       <td class="muted">${esc(r.used_at || '-')}</td>
       <td class="actions">
-        ${cbtn('复制邮箱', r.copy_line)} ${cbtn('复制Token', r.access_token, 'primary')} ${cbtn('复制整行', r.account_copy_line, 'good')}
+        ${cbtn('复制邮箱', r.copy_line)} ${r.readonly ? '<span class="muted">自动同步</span>' : `${cbtn('复制Token', r.access_token, 'primary')} ${cbtn('复制整行', r.account_copy_line, 'good')}
         ${r.status !== 'available'
           ? `<button data-pool-act="available" data-email="${esc(r.email)}" data-source="${esc(r.source || 'outlook')}">恢复可用</button>`
           : ''}
@@ -2419,7 +2420,7 @@ function renderOutlook() {
         ${r.status !== 'failed'
           ? `<button data-pool-act="failed" data-email="${esc(r.email)}" data-source="${esc(r.source || 'outlook')}">标失败</button>`
           : ''}
-        <button data-pool-act="delete" data-email="${esc(r.email)}" data-source="${esc(r.source || 'outlook')}" style="border-color:#e7a3a0;color:#b3261e;">删除</button>
+        <button data-pool-act="delete" data-email="${esc(r.email)}" data-source="${esc(r.source || 'outlook')}" style="border-color:#e7a3a0;color:#b3261e;">删除</button>`}
       </td>
     </tr>`).join('') || '<tr><td colspan="8" class="muted">邮箱池为空</td></tr>';
   updateOutlookSelectionUi(rows);
@@ -2442,7 +2443,7 @@ function updateOutlookSelectionUi(pageRows = null) {
   if (!pageRows) {
     pageRows = OUTLOOK;
   }
-  const pageKeys = pageRows.map(r => poolKey(r)).filter(Boolean);
+  const pageKeys = pageRows.filter(r => !r.readonly).map(r => poolKey(r)).filter(Boolean);
   const checkedCount = pageKeys.filter(key => OUTLOOK_SELECTED.has(key)).length;
   cbAll.checked = pageKeys.length > 0 && checkedCount === pageKeys.length;
   cbAll.indeterminate = checkedCount > 0 && checkedCount < pageKeys.length;
@@ -2452,7 +2453,7 @@ $('#qOutlook').addEventListener('input', debounce(() => { PAGERS.outlook.page = 
 $('#poolSource').addEventListener('change', () => {
   PAGERS.outlook.page = 1;
   OUTLOOK_SELECTED.clear();
-  if ($('#poolSource').value !== 'all' && $('#poolSource').value !== 'cloudflare_domain') $('#importSource').value = $('#poolSource').value;
+  if ($('#poolSource').value === 'outlook' || $('#poolSource').value === 'generic_api') $('#importSource').value = $('#poolSource').value;
   loadOutlook();
 });
 $('#importSource').addEventListener('change', () => {
@@ -2464,7 +2465,7 @@ $('#importSource').addEventListener('change', () => {
 $('#copyAllEmails').addEventListener('click', () => copyText(OUTLOOK.map(r=>r.copy_line).filter(Boolean).join('\n')));
 $('#outlookSelectAll').addEventListener('change', (e) => {
   const pageRows = OUTLOOK;
-  if (e.target.checked) pageRows.forEach(r => r.email && OUTLOOK_SELECTED.add(poolKey(r)));
+  if (e.target.checked) pageRows.forEach(r => r.email && !r.readonly && OUTLOOK_SELECTED.add(poolKey(r)));
   else pageRows.forEach(r => OUTLOOK_SELECTED.delete(poolKey(r)));
   renderOutlook();
 });
