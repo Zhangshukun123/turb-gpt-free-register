@@ -186,12 +186,26 @@ curl -X POST https://你的网关/api/v1/accounts/import \
 ```dotenv
 USE_EMAIL_SERVICE=True
 EMAIL_SOURCE=icloud
+ICLOUD_API_MODE=gateway
 ICLOUD_API_BASE=https://你的网关
 ICLOUD_API_KEY=与服务器相同的密钥
 ICLOUD_REQUEST_TIMEOUT=25
 ```
 
 网关使用 `imap.mail.me.com:993` + SSL。账号需开启双重认证并使用 Apple App 专用密码，而不是 Apple 账户主密码。完整部署和接口说明见 `icloud_gateway/README.md`。
+
+如果服务器已经运行 hidemyemail 邮箱库存与服务端 IMAP 取码接口，可直接切换为：
+
+```dotenv
+USE_EMAIL_SERVICE=True
+EMAIL_SOURCE=icloud
+ICLOUD_API_MODE=inventory
+ICLOUD_API_BASE=https://你的服务器域名
+ICLOUD_API_KEY=服务器的工作台导入令牌
+ICLOUD_REQUEST_TIMEOUT=25
+```
+
+`inventory` 模式从服务器 `/api/integrations/registration-inventory/lease` 领取邮箱，验证码由服务器 `/api/integrations/workbench/openai-code` 经 IMAP 获取；本地项目不会保存 iCloud IMAP 密码。注册结果保存后，项目会向服务器提交成功回执并将该邮箱标记为已使用。
 
 #### Outlook 邮箱池
 

@@ -466,6 +466,15 @@ def save_account_data(
     )
     logger.info(f"[Save] 账号已写入 DB, id={row_id}, email={email}")
     logger.info(f"[Save] 批次归档目录: {batch_folder}")
+    if str(email_source or "").strip().lower() == "icloud":
+        try:
+            from core.icloud_api_client import release_account
+
+            release_account(email, status="used", note=f"注册成功并已保存，account_id={row_id}")
+            logger.info(f"[iCloud] 服务器邮箱租约已标记为 used: email={email}")
+        except Exception as exc:
+            # 账号已持久化；回执失败时保留记录，并由服务器租约超时机制回收。
+            logger.warning(f"[iCloud] 提交成功回执失败: email={email}, error={exc}")
     if auto_plan_check is None:
         try:
             from config import register as _register_cfg

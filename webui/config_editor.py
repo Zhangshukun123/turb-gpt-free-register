@@ -320,13 +320,18 @@ EDITABLE_FIELDS = [
         "label": "邮箱来源", "help": "可填单个或多个，逗号分隔并按顺序兜底：icloud,outlook,generic_api,cloudflare_domain,cloudflare,gptmail,mailnest,cloudmail",
     },
     {
+        "key": "ICLOUD_API_MODE", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
+        "label": "iCloud 接口模式", "help": "inventory=直连现有服务器邮箱池；gateway=使用本项目 icloud_gateway",
+        "storage": "env",
+    },
+    {
         "key": "ICLOUD_API_BASE", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
         "label": "iCloud 网关地址", "help": "自建 iCloud Mail 网关 HTTPS 地址；选择 icloud 时必填",
         "storage": "env",
     },
     {
         "key": "ICLOUD_API_KEY", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
-        "label": "iCloud 网关 API Key", "help": "与服务器 ICLOUD_GATEWAY_API_KEY 一致；保存在 .env",
+        "label": "iCloud API 凭据", "help": "inventory 使用服务器工作台导入令牌；gateway 使用 ICLOUD_GATEWAY_API_KEY；保存在 .env",
         "storage": "env", "secret": True,
     },
     {
